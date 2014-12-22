@@ -94,6 +94,11 @@ cleanup:
 
 static void set_fan_speed(int8_t speed)
 {
+    static int8_t last_speed=-1;
+
+    if (speed == last_speed)
+        return;
+
     printf("Setting fan speed to %d\n", speed);
     set_gpio(23, 1);
     set_gpio(15, 1);
@@ -112,6 +117,7 @@ static void set_fan_speed(int8_t speed)
             set_gpio(15, 0);
             break;
     }
+    last_speed = speed;
 }
 
 bool init_fan_pins()
@@ -174,6 +180,10 @@ int main(void)
     CanopyResultEnum result;
     long reportTimer = 0;
 
+    result = canopy_set_global_opt(
+        CANOPY_LOG_LEVEL, 0,
+        CANOPY_LOG_PAYLOADS, true);
+
     ctx = canopy_init_context();
     if (!ctx) {
         fprintf(stderr, "Error initializing context\n");
@@ -207,11 +217,11 @@ int main(void)
         return -1;
     }
 
-    result = canopy_var_on_change(ctx, "fan_speed", on_fan_speed_change, NULL);
+    /*result = canopy_var_on_change(ctx, "fan_speed", on_fan_speed_change, NULL);
     if (result != CANOPY_SUCCESS) {
         fprintf(stderr, "Error setting up fan_speed callback\n");
         return -1;
-    }
+    }*/
 
     // turn fan off
     init_fan_pins();
@@ -222,7 +232,15 @@ int main(void)
     }
 
     while (1) {
+        int8_t speed;
         canopy_sync_blocking(ctx, 10*CANOPY_SECONDS);
+
+        result = canopy_var_get_int8(ctx, "fan_speed", &speed);
+        if (result != CANOPY_SUCCESS) {
+            fprintf(stderr, "Error reading fan_speed\n");
+            return -1;
+        }
+        set_fan_speed(speed);
 
         if (canopy_once_every(&reportTimer, 5*CANOPY_SECONDS)) {
             printf("reading sensors...\n");
