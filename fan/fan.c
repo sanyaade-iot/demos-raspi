@@ -44,7 +44,7 @@ int main(void)
     result = canopy_set_opt(ctx,
         CANOPY_DEVICE_UUID, "e6968460-f010-48ef-8e69-835543843b32",
         CANOPY_DEVICE_SECRET_KEY, "/pMdwTzEA3+d66qo3MZQ2bWjsYGXAHAb",
-        CANOPY_CLOUD_HOST, "sandbox.canopy.link"
+        CANOPY_CLOUD_SERVER, "sandbox.canopy.link"
     );
 
     if (result != CANOPY_SUCCESS){
@@ -52,17 +52,17 @@ int main(void)
         return -1;
     }
 
-    result = canopy_var_init("out float32 temperature");
+    result = canopy_var_init(ctx, "out float32 temperature");
     if (result != CANOPY_SUCCESS){
         fprintf(stderr, "Failed to init cloudvar 'temperature'");
         return -1;
     }
-    result = canopy_var_init("out float32 humidity");
+    result = canopy_var_init(ctx, "out float32 humidity");
     if (result != CANOPY_SUCCESS){
         fprintf(stderr, "Failed to init cloudvar 'humidity'");
         return -1;
     }
-    result = canopy_var_init("in int8 fan_speed");
+    result = canopy_var_init(ctx, "in int8 fan_speed");
     if (result != CANOPY_SUCCESS){
         fprintf(stderr, "Failed to init cloudvar 'fan_speed'");
         return -1;
