@@ -242,7 +242,7 @@ int main(void)
         }
         set_fan_speed(speed);
 
-        if (canopy_once_every(&reportTimer, 5*CANOPY_SECONDS)) {
+        if (canopy_once_every(&reportTimer, 60*CANOPY_SECONDS)) {
             printf("reading sensors...\n");
             float temperature, humidity;
             bool sensorOk;
