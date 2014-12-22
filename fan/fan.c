@@ -1,19 +1,158 @@
 #include <canopy.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include "pi_dht_read.h"
 
-static void SetFanSpeed(int8_t speed)
+#define SENSOR_PIN 2
+
+/* returns true on success */
+static bool set_gpio(int pin, int value)
 {
-    printf("Fan speed set to %d\n", speed);
+    FILE *fp;
+    char buf[1024];
+
+    snprintf(buf, 1024, "/sys/class/gpio/gpio%d/value", pin);
+    fp = fopen(buf, "w");
+    if (!fp)
+    {
+        fprintf(stderr, "Failed to set value of gpio%d\n", pin);
+        return false;
+    }
+
+    printf("writing %d to %s\n", value, buf);
+    fprintf(fp, "%d", value);
+    fclose(fp);
+
+    return true;
 }
 
-static bool ReadSensor(float *temperature, float *humidity)
+static bool set_gpio_direction(int pin, const char *direction) 
 {
-    *temperature = 40.1f;
-    *humidity = 23.3f;
+    FILE *fp;
+    char buf[1024];
+
+    /* set GPIO pin direction */
+    snprintf(
+        buf, 
+        1024, 
+        "/sys/class/gpio/gpio%d/direction", 
+        pin);
+    fp = fopen(buf, "w");
+    if (!fp)
+    {
+        fprintf(stderr, "Failed to set direction of gpio%d\n", pin);
+        goto cleanup;
+    }
+    printf("writing %s to %s\n", direction, buf);
+    fprintf(fp, "%s", direction);
+    fclose(fp);
+    return true;
+cleanup:
+    return false;
+}
+
+static bool init_gpio(int pin)
+{
+    FILE *fp;
+    char buf[1024];
+
+    /* export GPIO pin */
+    fp = fopen("/sys/class/gpio/export", "w");
+    if (!fp)
+    {
+        fprintf(stderr, "Failed to export pin %d\n", pin);
+        goto cleanup;
+    }
+    printf("writing %d to /sys/class/gpio/export\n", pin);
+    fprintf(fp, "%d", pin);
+    fclose(fp);
+
+    /* wait for ready */
+    snprintf(
+        buf, 
+        1024, 
+        "/sys/class/gpio/gpio%d/direction", 
+        pin);
+    do
+    {
+        fp = fopen(buf, "w");
+    } while (!fp && errno == EACCES);
+    if (!fp)
+    {
+        fprintf(stderr, "GPIO %d not ready\n", pin);
+        return false;
+    }
+    fclose(fp);
+    fprintf(stderr, "GPIO %d ready\n", pin);
+
+    return true;
+cleanup:
+    return false;
+}
+
+static void set_fan_speed(int8_t speed)
+{
+    printf("Setting fan speed to %d\n", speed);
+    set_gpio(23, 1);
+    set_gpio(15, 1);
+    set_gpio(18, 1);
+    switch (speed)
+    {
+        case 1:
+            /* slowest */
+            set_gpio(18, 0);
+            break;
+        case 2:
+            set_gpio(23, 0);
+            break;
+        case 3:
+            /* fastest */
+            set_gpio(15, 0);
+            break;
+    }
+}
+
+bool init_fan_pins()
+{
+    printf("starting...\n");
+    init_gpio(23);
+    set_gpio_direction(23, "in");
+    init_gpio(15);
+    set_gpio_direction(15, "in");
+    init_gpio(18);
+    set_gpio_direction(18, "in");
+
+    set_gpio_direction(23, "out");
+    set_gpio(23, 1);
+    set_gpio_direction(15, "out");
+    set_gpio(15, 1);
+    set_gpio_direction(18, "out");
+    set_gpio(18, 1);
+
+    init_gpio(25);
+    set_gpio_direction(25, "out");
+    set_gpio(25, 0);
+    return true;
+}
+
+static bool read_sensors(float *temperature, float *humidity)
+{
+    int result;
+    printf("reading...\n");
+    result = pi_dht_read(DHT22, SENSOR_PIN, temperature, humidity);
+    if (result != DHT_SUCCESS)
+    {
+        // TODO: cancel report
+        printf("Error reading DHT: %d\n", result);
+        return false;
+    }
+    return true;
 }
 
 
-static int OnFanSpeedChange(CanopyContext ctx, const char *varName, void *userData)
+static int on_fan_speed_change(CanopyContext ctx, const char *varName, void *userData)
 {
     int8_t fanSpeed;
     CanopyResultEnum result;
@@ -24,7 +163,7 @@ static int OnFanSpeedChange(CanopyContext ctx, const char *varName, void *userDa
         return -1;
     }
 
-    SetFanSpeed(fanSpeed);
+    set_fan_speed(fanSpeed);
     return 0;
 }
 
@@ -68,13 +207,14 @@ int main(void)
         return -1;
     }
 
-    result = canopy_var_on_change(ctx, "fan_speed", OnFanSpeedChange, NULL);
+    result = canopy_var_on_change(ctx, "fan_speed", on_fan_speed_change, NULL);
     if (result != CANOPY_SUCCESS) {
         fprintf(stderr, "Error setting up fan_speed callback\n");
         return -1;
     }
 
     // turn fan off
+    init_fan_pins();
     result = canopy_var_set_int8(ctx, "fan_speed", 0);
     if (!ctx) {
         fprintf(stderr, "Error setting fan_speed\n");
@@ -88,10 +228,10 @@ int main(void)
             printf("reading sensors...\n");
             float temperature, humidity;
             bool sensorOk;
-            sensorOk = ReadSensor(&temperature, &humidity);
+            sensorOk = read_sensors(&temperature, &humidity);
             if (sensorOk) {
                 printf("Temperature: %f    Humidity: %f\n", temperature, humidity);
-                result =canopy_var_set_float32(ctx, "temperature", temperature);
+                result = canopy_var_set_float32(ctx, "temperature", temperature);
                 if (result != CANOPY_SUCCESS) {
                     fprintf(stderr, "Failed to set cloudvar 'temperature'\n");
                     return -1;
