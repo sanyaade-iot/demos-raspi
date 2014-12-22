@@ -1,4 +1,5 @@
 #include <canopy.h>
+#include <stdio.h>
 
 static void SetFanSpeed(int8_t speed)
 {
@@ -15,6 +16,7 @@ static bool ReadSensor(float *temperature, float *humidity)
 static int OnFanSpeedChange(CanopyContext ctx, const char *varName, void *userData)
 {
     int8_t fanSpeed;
+    CanopyResultEnum result;
 
     result = canopy_var_get_int8(ctx, "fan_speed", &fanSpeed);
     if (!ctx) {
