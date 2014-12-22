@@ -178,7 +178,7 @@ int main(void)
 {
     CanopyContext ctx;
     CanopyResultEnum result;
-    long reportTimer = 0;
+    uint64_t reportTimer = 0;
 
     result = canopy_set_global_opt(
         CANOPY_LOG_LEVEL, 0,
